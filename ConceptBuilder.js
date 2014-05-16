@@ -47,11 +47,14 @@ ConceptBuilder.prototype = {
 
 };
 
-function Spy() {
+function Spy(functionBody) {
+
+    functionBody = functionBody || function() {};
 
     var context = {
         arrCalls: [],
         arrConditionalActions: [],
+        functionBody: functionBody,
         returnValue: undefined
     };
 
@@ -60,7 +63,8 @@ function Spy() {
             this: this,
             arguments: arguments
         });
-        var returnValue = context.returnValue;
+        var functionBodyResult = context.functionBody();
+        var returnValue = typeof context.returnValue !== 'undefined' ? context.returnValue : functionBodyResult;
         for (var idx = 0; idx < context.arrConditionalActions.length; ++idx) {
             var action = context.arrConditionalActions[idx];
             if (action.condition(this, arguments)) {
@@ -145,16 +149,26 @@ Spy.prototype = {
     },
 
     whenCalled: function whenCalled() {
-        return this;
+        var self = this;
+        return {
+            returnValue: function returnValue(value) {
+                self._context.returnValue = value;
+            },
+            executeFunction: function executeFunction(func) {
+                self._context.arrConditionalActions.push({
+                    type: 'executeFunction',
+                    func: func,
+                    condition: function() { return true; }
+                });
+                return self;
+            },
+        };
     },
 
-    executeFunction: function executeFunction(func) {
-        this._context.arrConditionalActions.push({
-            type: 'executeFunction',
-            func: func,
-            condition: function() { return true; }
-        })
+    setFunctionBody: function setFunctionBody(func) {
+        this._context.functionBody = func;
     },
+
 
     returnValue: function returnValue(value) {
         this._context.returnValue = value;
@@ -193,7 +207,11 @@ Field.prototype = {
 
     mock: function mock() {
         if (this.hasOwnProperty('defaultValue')) {
-            return this.defaultValue;
+            if (typeof this.defaultValue === 'function') {
+                return new Spy(this.defaultValue);
+            } else {
+                return this.defaultValue;
+            }
         }
         switch (this._arrTypes[0]) {
             case this.NoType:       return null;
@@ -277,7 +295,7 @@ var dogConcept = new ConceptBuilder()
     .addInteger('age').withDefaultMockValue(0)
     .addString('name').withDefaultMockValue('Spot')
     .addConcept('face', faceConcept)
-    .addMethod('bark')
+    .addMethod('bark').withDefaultMockValue(function() { console.log('woof!') })
     .build();
 
 var dumbConcept = new ConceptBuilder()
@@ -289,7 +307,7 @@ conceptMock.mock.whenCalled().returnValue({ hello: 'world' })
 conceptMock.mock.whenCalledWith('test').returnValue({ what: 'the fuck' });
 conceptMock.mock.whenCalledWith('test').executeFunction(function() { console.log('wat') });
 conceptMock.isImplementedBy.returnValue(false)
-conceptMock.isImplementedBy.executeFunction(function() { console.log('ahahaha') })
+conceptMock.isImplementedBy.whenCalled().executeFunction(function() { console.log('ahahaha') })
 conceptMock.isImplementedBy.whenCalledWith('omg').returnValue(true)
 
 console.log(conceptMock.mock());
@@ -299,7 +317,9 @@ console.log(conceptMock.isImplementedBy('anything else'))
 console.log(conceptMock.isImplementedBy('omg'))
 
 var dogMock = dogConcept.mock();
-dogMock.bark.executeFunction(function() { console.log('woof!') })
+dogMock.bark.whenCalled().executeFunction(function() { console.log('woof!') })
 dogMock.bark.returnValue('wof')
 console.log(dogMock.bark())
 
+var dogMock2 = dogConcept.mock();
+console.log(dogMock2.bark());
