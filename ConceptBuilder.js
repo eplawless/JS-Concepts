@@ -197,13 +197,13 @@ Field.prototype = {
         }
         switch (this._arrTypes[0]) {
             case this.NoType:       return null;
-            case this.IntegerType:  return 1234;
-            case this.NumberType:   return 1.234;
-            case this.StringType:   return 'mockstring';
+            case this.IntegerType:  return 0;
+            case this.NumberType:   return 0;
+            case this.StringType:   return '';
             case this.FunctionType: return new Spy;
             case this.ArrayType:    return [];
             case this.ObjectType:   return {};
-            case this.RegexType:    return /./;
+            case this.RegexType:    return new RegExp;
             case this.ConceptType:  return this.data.mock();
             default:                return undefined;
         }
