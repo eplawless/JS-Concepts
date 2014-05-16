@@ -49,14 +49,33 @@ ConceptBuilder.prototype = {
 
 function Spy() {
 
-    var arrCalls = [];
-    var result = function() {
-        arrCalls.push({
+    var context = {
+        arrCalls: [],
+        arrConditionalActions: [],
+        returnValue: undefined
+    };
+
+    var result = function spy() {
+        context.arrCalls.push({
             this: this,
             arguments: arguments
         });
+        var returnValue = context.returnValue;
+        for (var idx = 0; idx < context.arrConditionalActions.length; ++idx) {
+            var action = context.arrConditionalActions[idx];
+            if (action.condition(this, arguments)) {
+                switch (action.type) {
+                    case 'returnValue': returnValue = action.returnValue;
+                        break;
+                    case 'executeFunction': action.func();
+                        break;
+                }
+            }
+        }
+        return returnValue;
     };
-    result._arrCalls = arrCalls;
+
+    result._context = context;
     var prototype = result.__proto__ = Object.create(result.__proto__);
     for (var key in this.__proto__) {
         prototype[key] = this.__proto__[key];
@@ -67,13 +86,14 @@ function Spy() {
 
 Spy.prototype = {
 
-    calledWith: function calledWith() {
+    wasCalledWith: function wasCalledWith() {
 
-        if (this._arrCalls.length === 0)
+        var arrCalls = this._context.arrCalls;
+        if (arrCalls.length === 0)
             return false;
         var arrExpectedArguments = Array.prototype.slice.call(arguments, 0);
-        for (var idxCall = 0; idxCall < this._arrCalls.length; ++idxCall) {
-            var call = this._arrCalls[idxCall];
+        for (var idxCall = 0; idxCall < arrCalls.length; ++idxCall) {
+            var call = arrCalls[idxCall];
             if (call.arguments.length < arrExpectedArguments.length)
                 continue;
             var failedMatch = false;
@@ -90,6 +110,54 @@ Spy.prototype = {
         }
         return false;
 
+    },
+
+    whenCalledWith: function whenCalledWith() {
+        var self = this;
+        var arrExpectedArguments = Array.prototype.slice.call(arguments, 0);
+        var conditionalAction = {
+            type: undefined, // TBD by returnValue call
+            returnValue: undefined, // ditto
+            condition: function wasCalledWithExpectedArguments(self, arrArguments) {
+                if (arrExpectedArguments.length > arrArguments.length)
+                    return false;
+                for (var idx = 0; idx < arrExpectedArguments.length; ++idx) {
+                    if (arrExpectedArguments[idx] !== arrArguments[idx])
+                        return false;
+                }
+                return true;
+            }
+        };
+        return {
+            executeFunction: function(func) {
+                conditionalAction.type = 'executeFunction';
+                conditionalAction.func = func;
+                self._context.arrConditionalActions.push(conditionalAction);
+                return self;
+            },
+            returnValue: function(value) {
+                conditionalAction.type = 'returnValue';
+                conditionalAction.returnValue = value;
+                self._context.arrConditionalActions.push(conditionalAction);
+                return self;
+            }
+        };
+    },
+
+    whenCalled: function whenCalled() {
+        return this;
+    },
+
+    executeFunction: function executeFunction(func) {
+        this._context.arrConditionalActions.push({
+            type: 'executeFunction',
+            func: func,
+            condition: function() { return true; }
+        })
+    },
+
+    returnValue: function returnValue(value) {
+        this._context.returnValue = value;
     },
 
 };
@@ -209,6 +277,7 @@ var dogConcept = new ConceptBuilder()
     .addInteger('age').withDefaultMockValue(0)
     .addString('name').withDefaultMockValue('Spot')
     .addConcept('face', faceConcept)
+    .addMethod('bark')
     .build();
 
 var dumbConcept = new ConceptBuilder()
@@ -216,6 +285,21 @@ var dumbConcept = new ConceptBuilder()
     .build();
 
 var conceptMock = conceptConcept.mock();
-conceptMock.mock('test');
-console.log(conceptMock.mock.calledWith('test'))
-console.log(conceptMock)
+conceptMock.mock.whenCalled().returnValue({ hello: 'world' })
+conceptMock.mock.whenCalledWith('test').returnValue({ what: 'the fuck' });
+conceptMock.mock.whenCalledWith('test').executeFunction(function() { console.log('wat') });
+conceptMock.isImplementedBy.returnValue(false)
+conceptMock.isImplementedBy.executeFunction(function() { console.log('ahahaha') })
+conceptMock.isImplementedBy.whenCalledWith('omg').returnValue(true)
+
+console.log(conceptMock.mock());
+console.log(conceptMock.mock('test'));
+console.log(conceptMock.mock.wasCalledWith('test'))
+console.log(conceptMock.isImplementedBy('anything else'))
+console.log(conceptMock.isImplementedBy('omg'))
+
+var dogMock = dogConcept.mock();
+dogMock.bark.executeFunction(function() { console.log('woof!') })
+dogMock.bark.returnValue('wof')
+console.log(dogMock.bark())
+
